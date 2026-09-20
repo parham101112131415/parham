@@ -19,6 +19,6 @@ RUN pip3 install --break-system-packages -r requirements.txt
 COPY . .
 RUN chmod +x start.sh
 
-VOLUME ["/data"]
+# NOTE: no VOLUME instruction here — attach a Railway Volume to /data instead.
 EXPOSE 8080
 CMD ["./start.sh"]
