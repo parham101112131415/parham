@@ -32,10 +32,7 @@ async def _transcribe(ogg_path: str) -> str:
 async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Voice message → transcribe → agent answer."""
     user_id = update.effective_user.id
-    db_user = await get_or_create_user(user_id)
-    if not db_user.onboarded:
-        await update.message.reply_text("اول با /start خودتو معرفی کن 😎")
-        return
+    await get_or_create_user(user_id)
     if not CONFIG.openai_api_key:
         await update.message.reply_text("ویس فعلاً بدون کلید OpenAI کار نمی‌کنه، متنی بفرست 😎")
         return
@@ -66,10 +63,7 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Photo → Vision analysis when API key exists, else forward note to agent."""
     user_id = update.effective_user.id
-    db_user = await get_or_create_user(user_id)
-    if not db_user.onboarded:
-        await update.message.reply_text("اول با /start خودتو معرفی کن 😎")
-        return
+    await get_or_create_user(user_id)
     caption = (update.message.caption or "").strip()
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.TYPING)
     prompt = f"کاربر یک عکس فرستاده{' با این کپشن: ' + caption if caption else ' (بدون کپشن)'}."

@@ -21,6 +21,7 @@ async def ask_agent(
     serve_url: str,
     model: str,
     timeout: int = 180,
+    allow_edit: bool = False,
 ) -> str:
     """Send a prompt to opencode and return the agent's reply text.
 
@@ -30,6 +31,8 @@ async def ask_agent(
         serve_url: Base URL of the local ``opencode serve`` instance.
         model: Model id, e.g. ``opencode/muse-spark-1.3``.
         timeout: Max seconds to wait for the agent.
+        allow_edit: Owner-only. When True, the agent may edit its own
+            code (``--auto``) when the owner asks for changes.
 
     Returns:
         The agent's reply text, or an error message in Persian.
@@ -50,8 +53,10 @@ async def ask_agent(
         model,
         "--format",
         "json",
-        prompt,
     ]
+    if allow_edit:
+        cmd.append("--auto")
+    cmd.append(prompt)
     try:
         proc = await asyncio.create_subprocess_exec(
             *cmd,

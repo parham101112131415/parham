@@ -19,7 +19,7 @@ class User(Base):
     telegram_id: Mapped[int] = mapped_column(BigInteger, unique=True, index=True)
     username: Mapped[str] = mapped_column(String(128), default="")
     real_name: Mapped[str] = mapped_column(String(128), default="")
-    bot_name: Mapped[str] = mapped_column(String(128), default="Parham")
+    bot_name: Mapped[str] = mapped_column(String(128), default="")
     personality: Mapped[str] = mapped_column(Text, default="")
     city: Mapped[str] = mapped_column(String(128), default="")
     interests: Mapped[str] = mapped_column(Text, default="")

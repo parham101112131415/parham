@@ -94,11 +94,6 @@ async def mode_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     await query.message.reply_text("حالت عوض شد ✅")
 
 
-async def reconfig_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Fallback if /reconfig arrives outside the conversation (should not happen)."""
-    await update.message.reply_text("با /reconfig دوباره شروع می‌کنیم — اسمت چیه؟")
-
-
 async def lang_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Set reply language (default auto-detect)."""
     args = context.args

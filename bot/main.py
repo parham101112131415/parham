@@ -55,9 +55,10 @@ async def main() -> None:
     init_engine(CONFIG.db_path)
     await init_db()
 
-    # 3. Telegram application.
+    # 3. Telegram application (onboarding is AI-driven — no step handlers).
     app = Application.builder().token(CONFIG.bot_token).build()
-    app.add_handler(onboarding.onboarding_handler())
+    app.add_handler(CommandHandler("start", onboarding.start_cmd))
+    app.add_handler(CommandHandler("reconfig", onboarding.reconfig_cmd))
     app.add_handler(CommandHandler("help", commands.help_cmd))
     app.add_handler(CommandHandler("settings", commands.settings_cmd))
     app.add_handler(CommandHandler("clear", commands.clear_cmd))

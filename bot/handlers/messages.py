@@ -20,6 +20,7 @@ from bot.services.memory import (
     get_history,
     get_or_create_user,
     save_fact,
+    save_user,
 )
 
 log = logging.getLogger("parham.messages")
@@ -47,11 +48,16 @@ def feedback_keyboard() -> InlineKeyboardMarkup:
     )
 
 
+# User-profile keys the agent stores via [MEMORY: key=value].
+PROFILE_KEYS = {"real_name", "bot_name", "city", "interests", "personality"}
+
+
 async def answer_for(user_id: int, text: str) -> str:
     """Run the agent pipeline for a user message and return the clean reply."""
+    is_owner = CONFIG.is_owner(user_id)
     db_user = await get_or_create_user(user_id)
     facts = await get_facts(user_id)
-    system = build_system_prompt(db_user, facts)
+    system = build_system_prompt(db_user, facts, is_owner=is_owner)
     history = await get_history(user_id, CONFIG.history_limit)
 
     if CONFIG.ai_backend == "openai" and CONFIG.openai_api_key:
@@ -73,14 +79,46 @@ async def answer_for(user_id: int, text: str) -> str:
             prompt,
             serve_url=CONFIG.opencode_serve_url,
             model=CONFIG.opencode_model,
+            allow_edit=is_owner,
         )
 
     clean, new_facts = extract_memory_tags(reply)
+    profile_changed = False
     for key, value in new_facts.items():
-        await save_fact(user_id, key, value)
+        if key in PROFILE_KEYS:
+            setattr(db_user, key, value[:500])
+            profile_changed = True
+        else:
+            await save_fact(user_id, key, value)
+    if profile_changed:
+        await save_user(db_user)
+    if not db_user.onboarded and all(
+        [db_user.real_name, db_user.bot_name, db_user.city, db_user.interests]
+    ):
+        db_user.onboarded = True
+        await save_user(db_user)
     await add_message(user_id, "user", text, CONFIG.history_limit)
     await add_message(user_id, "assistant", clean, CONFIG.history_limit)
     return clean
+
+
+async def send_reply(message, user_id: int, reply: str) -> None:
+    """Send a reply chunked (spec) with the italic follow-up + buttons."""
+    _last_replies[user_id] = reply
+    chunks = split_chunks(reply, CONFIG.chunk_size)
+    follow_up = f"_{random.choice(FOLLOW_UPS)}_"
+    for i, chunk in enumerate(chunks):
+        await asyncio.sleep(random.uniform(0.4, 0.7))
+        last = i == len(chunks) - 1
+        markup = feedback_keyboard() if last else None
+        body = f"{chunk}\n\n{follow_up}" if last else chunk
+        try:
+            await message.reply_text(
+                body, parse_mode=ParseMode.MARKDOWN, reply_markup=markup
+            )
+        except Exception:  # noqa: BLE001
+            log.warning("markdown send failed, retrying plain")
+            await message.reply_text(chunk, reply_markup=markup)
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -92,10 +130,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if not text:
         return
 
-    db_user = await get_or_create_user(user_id)
-    if not db_user.onboarded:
-        await update.message.reply_text("اول با /start خودتو معرفی کن 😎")
-        return
+    # No hardcoded gates: the agent itself onboards unknown users.
+    await get_or_create_user(user_id)
 
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.TYPING)
     try:
@@ -105,21 +141,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await update.message.reply_text("یه لحظه مشکلی پیش اومد، دوباره امتحان کن")
         return
 
-    _last_replies[user_id] = reply
-    chunks = split_chunks(reply, CONFIG.chunk_size)
-    follow_up = f"_{random.choice(FOLLOW_UPS)}_"
-    for i, chunk in enumerate(chunks):
-        await asyncio.sleep(random.uniform(0.4, 0.7))
-        last = i == len(chunks) - 1
-        markup = feedback_keyboard() if last else None
-        body = f"{chunk}\n\n{follow_up}" if last else chunk
-        try:
-            await update.message.reply_text(
-                body, parse_mode=ParseMode.MARKDOWN, reply_markup=markup
-            )
-        except Exception:  # noqa: BLE001
-            log.warning("markdown send failed, retrying plain")
-            await update.message.reply_text(chunk, reply_markup=markup)
+    await send_reply(update.message, user_id, reply)
 
 
 def last_reply(user_id: int) -> str:

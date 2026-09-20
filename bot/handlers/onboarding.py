@@ -1,142 +1,44 @@
-"""Onboarding flow: name → personality → city → interests (spec)."""
+"""AI-driven onboarding: /start and /reconfig hand the conversation to the
+agent — no hardcoded question steps. The agent asks (name → bot name →
+city → interests → personality) conversationally and stores answers via
+[MEMORY: key=value] tags (see bot.ai.prompts).
+"""
 from __future__ import annotations
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.ext import (
-    CallbackQueryHandler,
-    CommandHandler,
-    ContextTypes,
-    ConversationHandler,
-    MessageHandler,
-    filters,
-)
+from telegram import Update
+from telegram.constants import ChatAction
+from telegram.ext import ContextTypes
 
-from bot.ai.prompts import PERSONALITY_BUTTONS
-from bot.services.memory import get_or_create_user, save_user
-
-NAME, PERSONALITY, CITY, INTERESTS = range(4)
+from bot.handlers.messages import answer_for, send_reply
+from bot.services.memory import clear_facts, get_or_create_user, save_user
 
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Entry point: ask for the user's name."""
-    user = update.effective_user
-    await get_or_create_user(user.id, user.username or "")
-    await update.message.reply_text("سلام! من پارهمم 😎\nاسمت چیه؟")
-    return NAME
+async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Start (or resume) the conversation through the agent."""
+    user_id = update.effective_user.id
+    db_user = await get_or_create_user(user_id, update.effective_user.username or "")
+    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.TYPING)
+    if db_user.onboarded:
+        trigger = "[SYSTEM: کاربر /start زد و قبلاً معرفی شده. صمیمی خوش‌آمد بگو و بپرس چی کار داره.]"
+    else:
+        trigger = "[SYSTEM: کاربر /start زد و هنوز معرفی نشده. مکالمه آشنایی را قدم‌به‌قدم شروع کن.]"
+    reply = await answer_for(user_id, trigger)
+    await send_reply(update.message, user_id, reply)
 
 
-async def ask_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Store name, ask for personality."""
-    db_user = await get_or_create_user(update.effective_user.id)
-    db_user.real_name = (update.message.text or "").strip()[:128]
-    await save_user(db_user)
-    keyboard = [
-        [InlineKeyboardButton(label, callback_data=f"personality:{key}")]
-        for label, key in PERSONALITY_BUTTONS
-    ]
-    keyboard.append([InlineKeyboardButton("✍️ خودم توصیف می‌کنم", callback_data="personality:custom")])
-    await update.message.reply_text(
-        f"خوشبختم {db_user.real_name}! می‌خوای چجوری باشم؟",
-        reply_markup=InlineKeyboardMarkup(keyboard),
-    )
-    return PERSONALITY
-
-
-async def ask_personality(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Store personality (button or custom text), ask for city/timezone."""
-    query = update.callback_query
-    await query.answer()
-    choice = query.data.split(":", 1)[1]
-    if choice == "custom":
-        await query.message.reply_text("بگو دقیقاً چه شخصیتی داشته باشم؟ (مثلاً: مثل یه رفیق باش که کم حرف می‌زنه)")
-        return PERSONALITY
-    db_user = await get_or_create_user(update.effective_user.id)
-    db_user.personality = choice
-    await save_user(db_user)
-    await query.message.reply_text("کجایی؟ (شهرت — برای ساعت و زمان‌بندی)")
-    return CITY
-
-
-async def ask_personality_custom(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Store a free-text personality, or the city if personality is already set."""
-    db_user = await get_or_create_user(update.effective_user.id)
-    if context.user_data.pop("awaiting_personality", None) or not db_user.personality:
-        db_user.personality = (update.message.text or "").strip()[:500]
-        await save_user(db_user)
-        await update.message.reply_text("کجایی؟ (شهرت — برای ساعت و زمان‌بندی)")
-        return CITY
-    return await ask_city(update, context)
-
-
-async def ask_city(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Store city, ask for interests."""
-    db_user = await get_or_create_user(update.effective_user.id)
-    db_user.city = (update.message.text or "").strip()[:128]
-    await save_user(db_user)
-    await update.message.reply_text("به چه چیزایی علاقه داری؟ (با کاما جدا کن)")
-    return INTERESTS
-
-
-async def finish_onboarding(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Store interests, mark onboarded."""
-    db_user = await get_or_create_user(update.effective_user.id)
-    db_user.interests = (update.message.text or "").strip()[:500]
-    db_user.onboarded = True
-    await save_user(db_user)
-    await update.message.reply_text(
-        "تمومه! از این به بعد من دقیقاً همونم که گفتی 😎\n"
-        "با /reconfig می‌تونی هر وقت خواستی عوضم کنی. بگو چی تو ذهنته؟"
-    )
-    return ConversationHandler.END
-
-
-async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Cancel onboarding."""
-    await update.message.reply_text("باشه، بعداً با /start ادامه می‌دیم.")
-    return ConversationHandler.END
-
-
-async def reconfig_entry(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Reset profile and restart onboarding."""
-    db_user = await get_or_create_user(update.effective_user.id)
+async def reconfig_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Reset profile and let the agent re-onboard conversationally."""
+    user_id = update.effective_user.id
+    db_user = await get_or_create_user(user_id)
     db_user.real_name = ""
+    db_user.bot_name = ""
     db_user.personality = ""
     db_user.city = ""
     db_user.interests = ""
     db_user.onboarded = False
     await save_user(db_user)
-    context.user_data.clear()
-    await update.message.reply_text("باشه از اول 😎 اسمت چیه؟")
-    return NAME
-
-
-def onboarding_handler() -> ConversationHandler:
-    """Build the onboarding ConversationHandler."""
-    return ConversationHandler(
-        entry_points=[
-            CommandHandler("start", start),
-            CommandHandler("reconfig", reconfig_entry),
-        ],
-        states={
-            NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_name)],
-            PERSONALITY: [
-                CallbackQueryHandler(ask_personality, pattern=r"^personality:(?!custom$)"),
-                CallbackQueryHandler(
-                    lambda u, c: _prompt_custom(u, c), pattern=r"^personality:custom$"
-                ),
-                MessageHandler(filters.TEXT & ~filters.COMMAND, ask_personality_custom),
-            ],
-            CITY: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_city)],
-            INTERESTS: [MessageHandler(filters.TEXT & ~filters.COMMAND, finish_onboarding)],
-        },
-        fallbacks=[CommandHandler("cancel", cancel)],
-        name="onboarding",
-        persistent=False,
-    )
-
-
-async def _prompt_custom(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    context.user_data["awaiting_personality"] = True
-    await update.callback_query.answer()
-    await update.callback_query.message.reply_text("بگو دقیقاً چه شخصیتی داشته باشم؟")
-    return PERSONALITY
+    await clear_facts(user_id)
+    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.TYPING)
+    trigger = "[SYSTEM: کاربر خواست از اول شروع کند (/reconfig). پروفایلش پاک شد. مکالمه آشنایی را از اول شروع کن.]"
+    reply = await answer_for(user_id, trigger)
+    await send_reply(update.message, user_id, reply)
