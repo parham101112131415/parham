@@ -7,7 +7,7 @@ import os
 
 from aiohttp import web
 from dotenv import load_dotenv
-from telegram import Update
+from telegram import BotCommand, BotCommandScopeChat, BotCommandScopeDefault, Update
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
@@ -32,6 +32,39 @@ logging.basicConfig(
     handlers=[logging.StreamHandler()],
 )
 log = logging.getLogger("parham.main")
+
+
+# Bot command menu — set automatically on every boot, exactly like a
+# Hermes gateway deploy (menu button next to the chat input).
+PUBLIC_COMMANDS = [
+    BotCommand("start", "شروع و معرفی"),
+    BotCommand("help", "راهنما"),
+    BotCommand("settings", "تنظیمات"),
+    BotCommand("clear", "پاک کردن تاریخچه"),
+    BotCommand("memory", "چی ازت یاد گرفتم"),
+    BotCommand("forget", "فراموش کردن همه‌چیز"),
+    BotCommand("mode", "حالت جواب"),
+    BotCommand("reconfig", "شروع از اول"),
+    BotCommand("lang", "زبان جواب"),
+]
+
+OWNER_COMMANDS = PUBLIC_COMMANDS + [
+    BotCommand("backup", "بکاپ کامل (مالک)"),
+    BotCommand("restore", "ریستور از فایل (مالک)"),
+]
+
+
+async def _set_menus(app: Application) -> None:
+    """Publish the command menus (public + owner scope)."""
+    try:
+        await app.bot.set_my_commands(PUBLIC_COMMANDS, scope=BotCommandScopeDefault())
+        if CONFIG.owner_id:
+            await app.bot.set_my_commands(
+                OWNER_COMMANDS, scope=BotCommandScopeChat(chat_id=CONFIG.owner_id)
+            )
+        log.info("command menus published")
+    except Exception:  # noqa: BLE001
+        log.exception("failed to publish command menus")
 
 
 async def _run_dashboard() -> None:
@@ -85,6 +118,7 @@ async def main() -> None:
     # 6. Telegram (polling — zero config, works on Railway).
     log.info("starting polling")
     await app.initialize()
+    await _set_menus(app)
     await app.start()
     await app.updater.start_polling(allowed_updates=Update.ALL_TYPES)
     try:
