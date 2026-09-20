@@ -22,7 +22,7 @@ from bot.config import CONFIG  # noqa: E402
 from bot.dashboard.app import build_app  # noqa: E402
 from bot.db.models import init_db, init_engine  # noqa: E402
 from bot.handlers import backup as backup_h  # noqa: E402
-from bot.handlers import callbacks, commands, media, messages, onboarding  # noqa: E402
+from bot.handlers import callbacks, commands, diag, media, messages, onboarding  # noqa: E402
 from bot.services import seed as seed_svc  # noqa: E402
 from bot.services import workers as workers_svc  # noqa: E402
 
@@ -51,6 +51,7 @@ PUBLIC_COMMANDS = [
 OWNER_COMMANDS = PUBLIC_COMMANDS + [
     BotCommand("backup", "بکاپ کامل (مالک)"),
     BotCommand("restore", "ریستور از فایل (مالک)"),
+    BotCommand("status", "وضعیت مغز بات (مالک)"),
 ]
 
 
@@ -102,6 +103,7 @@ async def main() -> None:
     app.add_handler(CommandHandler("lang", commands.lang_cmd))
     app.add_handler(CommandHandler("backup", backup_h.backup_cmd))
     app.add_handler(CommandHandler("restore", backup_h.restore_cmd))
+    app.add_handler(CommandHandler("status", diag.status_cmd))
     app.add_handler(CallbackQueryHandler(callbacks.on_feedback, pattern=r"^fb:"))
     app.add_handler(MessageHandler(filters.VOICE, media.handle_voice))
     app.add_handler(MessageHandler(filters.PHOTO, media.handle_photo))

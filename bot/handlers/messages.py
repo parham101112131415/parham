@@ -3,13 +3,14 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import random
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.constants import ChatAction, ParseMode
 from telegram.ext import ContextTypes
 
-from bot.ai.bridge import ask_agent
+from bot.ai.bridge import GENERIC_ERROR, ask_agent
 from bot.ai.fallback import ask_openai
 from bot.ai.prompts import build_system_prompt
 from bot.config import CONFIG
@@ -74,13 +75,29 @@ async def answer_for(user_id: int, text: str) -> str:
             f"{'کاربر' if m['role'] == 'user' else 'دستیار'}: {m['content']}" for m in history
         )
         prompt += f"\n\nپیام جدید کاربر: {text}\nفقط متن جواب را بنویس."
-        reply = await ask_agent(
-            user_id,
-            prompt,
-            serve_url=CONFIG.opencode_serve_url,
-            model=CONFIG.opencode_model,
-            allow_edit=is_owner,
-        )
+        error_log = os.path.join(CONFIG.data_dir, "opencode_last_error.log")
+        try:
+            reply = await ask_agent(
+                user_id,
+                prompt,
+                serve_url=CONFIG.opencode_serve_url,
+                model=CONFIG.opencode_model,
+                allow_edit=is_owner,
+                error_log=error_log,
+            )
+        except RuntimeError:
+            log.exception("bridge failed for user %s", user_id)
+            if CONFIG.openai_api_key:
+                reply = await ask_openai(
+                    system,
+                    history,
+                    text,
+                    api_key=CONFIG.openai_api_key,
+                    base_url=CONFIG.openai_base_url,
+                    model=CONFIG.openai_model,
+                )
+            else:
+                reply = GENERIC_ERROR
 
     clean, new_facts = extract_memory_tags(reply)
     profile_changed = False

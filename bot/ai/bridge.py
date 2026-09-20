@@ -13,6 +13,55 @@ import shutil
 
 log = logging.getLogger("parham.bridge")
 
+GENERIC_ERROR = "یه لحظه مشکلی پیش اومد، دوباره امتحان کن"
+
+
+async def _exec(cmd: list[str], timeout: int) -> str:
+    """Run an opencode command, return stdout or raise RuntimeError(stderr)."""
+    proc = await asyncio.create_subprocess_exec(
+        *cmd,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    try:
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+    except asyncio.TimeoutError:
+        try:
+            proc.kill()
+        except ProcessLookupError:
+            pass
+        raise RuntimeError("timeout after %ss" % timeout)
+    output = stdout.decode("utf-8", "ignore").strip()
+    if not output:
+        err = stderr.decode("utf-8", "ignore").strip()[-500:] or f"exit {proc.returncode}"
+        raise RuntimeError(err)
+    return output
+
+
+def _parse_reply(output: str) -> str:
+    """Extract the reply text from ``--format json`` event stream (or plain text)."""
+    reply = ""
+    for line in output.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        if not line.startswith("{"):
+            reply = line
+            continue
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        data = event.get("data") if isinstance(event.get("data"), dict) else event
+        part = data.get("part") or {}
+        if isinstance(part, dict) and part.get("type") == "text" and part.get("text"):
+            reply = part["text"]
+        elif isinstance(data.get("text"), str):
+            reply = data["text"]
+        elif isinstance(data.get("result"), str):
+            reply = data["result"]
+    return reply.strip()
+
 
 async def ask_agent(
     user_id: int,
@@ -22,8 +71,12 @@ async def ask_agent(
     model: str,
     timeout: int = 180,
     allow_edit: bool = False,
+    error_log: str | None = None,
 ) -> str:
     """Send a prompt to opencode and return the agent's reply text.
+
+    Tries the persistent attached session first (``--attach``), then falls
+    back to a standalone run. Raises RuntimeError if both fail.
 
     Args:
         user_id: Telegram user id (used to isolate the opencode session).
@@ -31,67 +84,46 @@ async def ask_agent(
         serve_url: Base URL of the local ``opencode serve`` instance.
         model: Model id, e.g. ``opencode/muse-spark-1.3``.
         timeout: Max seconds to wait for the agent.
-        allow_edit: Owner-only. When True, the agent may edit its own
-            code (``--auto``) when the owner asks for changes.
+        allow_edit: Owner-only ``--auto`` flag for self-modification.
+        error_log: Optional file path where the last stderr is stored
+            for the /status diagnostic.
 
     Returns:
-        The agent's reply text, or an error message in Persian.
+        The agent's reply text.
+
+    Raises:
+        RuntimeError: When opencode fails (message = human-readable cause).
     """
     binary = shutil.which("opencode")
     if not binary:
-        log.error("opencode binary not found")
-        return "یه لحظه مشکلی پیش اومد، دوباره امتحان کن"
+        raise RuntimeError("opencode binary not found on PATH")
 
-    cmd = [
-        binary,
-        "run",
-        "--attach",
-        serve_url,
-        "--session",
-        f"tg-{user_id}",
-        "--model",
-        model,
-        "--format",
-        "json",
-    ]
+    base = [binary, "run", "--model", model, "--format", "json"]
     if allow_edit:
-        cmd.append("--auto")
-    cmd.append(prompt)
-    try:
-        proc = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
-    except asyncio.TimeoutError:
-        log.warning("opencode timed out for user %s", user_id)
-        return "یه کم طول کشید، دوباره بفرستش"
-    except Exception:  # noqa: BLE001
-        log.exception("opencode bridge failed")
-        return "یه لحظه مشکلی پیش اومد، دوباره امتحان کن"
+        base.append("--auto")
 
-    output = stdout.decode("utf-8", "ignore").strip()
-    if not output:
-        err = stderr.decode("utf-8", "ignore").strip()[-300:]
-        log.error("empty opencode reply: %s", err)
-        return "یه لحظه مشکلی پیش اومد، دوباره امتحان کن"
-
-    # ``--format json`` streams JSON events; the last text part wins.
-    reply = ""
-    for line in output.splitlines():
-        line = line.strip()
-        if not line.startswith("{"):
-            reply = line
-            continue
+    attempts = [
+        base + ["--attach", serve_url, "--session", f"tg-{user_id}", prompt],
+        base + ["--session", f"tg-{user_id}", prompt],
+    ]
+    last_err = "unknown"
+    for i, cmd in enumerate(attempts):
         try:
-            event = json.loads(line)
-        except json.JSONDecodeError:
+            output = await _exec(cmd, timeout)
+        except RuntimeError as exc:
+            last_err = str(exc)
+            log.warning("opencode attempt %d failed for user %s: %s", i + 1, user_id, last_err)
             continue
-        data = event.get("data") or event
-        part = data.get("part") or {}
-        if isinstance(part, dict) and part.get("type") == "text" and part.get("text"):
-            reply = part["text"]
-        elif isinstance(data, dict) and isinstance(data.get("text"), str):
-            reply = data["text"]
-    return reply.strip() or "یه لحظه مشکلی پیش اومد، دوباره امتحان کن"
+        reply = _parse_reply(output)
+        if reply:
+            return reply
+        last_err = "empty reply: " + output[-300:]
+        log.warning("opencode attempt %d empty for user %s", i + 1, user_id)
+
+    if error_log:
+        try:
+            with open(error_log, "w") as fh:
+                fh.write(last_err)
+        except OSError:
+            pass
+    raise RuntimeError(last_err)
