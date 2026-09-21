@@ -1,1 +1,1 @@
-{"deploy": {"startCommand": "./start.sh", "healthcheckPath": "/health"}}
+{"deploy": {"startCommand": "./start.sh", "healthcheckPath": "/api/health"}}

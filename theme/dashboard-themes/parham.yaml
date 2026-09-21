@@ -1,0 +1,55 @@
+name: parham
+label: "Parham"
+description: "Animated red-black — Parham's signature look"
+palette:
+  background: "#0b0505"
+  midground: "#ffb3ab"
+  foreground: "#ffffff"
+  warmGlow: "rgba(239, 68, 68, 0.4)"
+  noiseOpacity: 0.7
+typography:
+  fontSans: "Vazirmatn, system-ui, Tahoma, sans-serif"
+  baseSize: "15px"
+layout:
+  radius: "0.75rem"
+  density: "comfortable"
+colorOverrides:
+  destructive: "#ef4444"
+  warning: "#f97316"
+  success: "#22c55e"
+customCSS: |
+  /* Parham — animated red/black + floating bubbles. Injected on theme apply. */
+  @keyframes parham-bg-pan {
+    0% { background-position: 0% 40%; }
+    50% { background-position: 100% 60%; }
+    100% { background-position: 0% 40%; }
+  }
+  @keyframes parham-bubble-rise {
+    0% { transform: translateY(12vh); opacity: 0; }
+    15% { opacity: 0.55; }
+    85% { opacity: 0.45; }
+    100% { transform: translateY(-110vh); opacity: 0; }
+  }
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background:
+      radial-gradient(circle at 12% 82%, rgba(239,68,68,.20) 0 90px, transparent 91px),
+      radial-gradient(circle at 68% 90%, rgba(239,68,68,.14) 0 60px, transparent 61px),
+      radial-gradient(circle at 84% 70%, rgba(239,68,68,.18) 0 110px, transparent 111px),
+      radial-gradient(circle at 32% 60%, rgba(239,68,68,.10) 0 70px, transparent 71px),
+      radial-gradient(circle at 52% 30%, rgba(239,68,68,.12) 0 50px, transparent 51px),
+      linear-gradient(120deg, #0b0505, #1c0605, #0b0505, #2a0a06);
+    background-size: auto, auto, auto, auto, auto, 300% 300%;
+    animation: parham-bg-pan 14s ease infinite, parham-bubble-rise 16s linear infinite;
+  }
+  #root { position: relative; z-index: 1; }
+  :is(header, [role="banner"], nav) {
+    text-shadow: 0 0 18px rgba(239,68,68,.55);
+  }
+  :is(a, button):hover {
+    filter: drop-shadow(0 0 8px rgba(239,68,68,.65));
+  }

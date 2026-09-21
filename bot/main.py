@@ -1,11 +1,14 @@
-"""Parham bot entrypoint: seed → db → workers → dashboard → Telegram polling."""
+"""Parham bot entrypoint: seed → db → workers → Telegram polling.
+
+The web dashboard on $PORT is the REAL Hermes dashboard
+(`hermes dashboard` from start.sh) — this process only runs Telegram.
+"""
 from __future__ import annotations
 
 import asyncio
 import logging
 import os
 
-from aiohttp import web
 from dotenv import load_dotenv
 from telegram import BotCommand, BotCommandScopeChat, BotCommandScopeDefault, Update
 from telegram.ext import (
@@ -19,7 +22,6 @@ from telegram.ext import (
 load_dotenv()
 
 from bot.config import CONFIG  # noqa: E402
-from bot.dashboard.app import build_app  # noqa: E402
 from bot.db.models import init_db, init_engine  # noqa: E402
 from bot.handlers import backup as backup_h  # noqa: E402
 from bot.handlers import callbacks, commands, diag, media, messages, onboarding  # noqa: E402
@@ -68,15 +70,6 @@ async def _set_menus(app: Application) -> None:
         log.exception("failed to publish command menus")
 
 
-async def _run_dashboard() -> None:
-    app = build_app()
-    runner = web.AppRunner(app)
-    await runner.setup()
-    site = web.TCPSite(runner, "0.0.0.0", CONFIG.port)
-    await site.start()
-    log.info("dashboard on :%s", CONFIG.port)
-
-
 async def main() -> None:
     """Boot everything."""
     CONFIG.validate()
@@ -114,10 +107,8 @@ async def main() -> None:
     # 4. Workers (dollar hourly/midnight, memory-backup, pairing-watch).
     workers_svc.start_workers(app)
 
-    # 5. Dashboard (Parham panel on $PORT).
-    await _run_dashboard()
-
-    # 6. Telegram (polling — zero config, works on Railway).
+    # 5. Telegram (polling — zero config, works on Railway).
+    #    NOTE: $PORT belongs to the real Hermes dashboard (see start.sh).
     log.info("starting polling")
     await app.initialize()
     await _set_menus(app)

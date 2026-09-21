@@ -42,11 +42,7 @@ class Config:
 
     data_dir: str = field(default_factory=lambda: _env("DATA_DIR", "./data"))
     mode: str = field(default_factory=lambda: _env("MODE", "polling"))
-    port: int = field(default_factory=lambda: _env_int("PORT", 8080))
     webhook_url: str = field(default_factory=lambda: _env("WEBHOOK_URL"))
-
-    dashboard_user: str = field(default_factory=lambda: _env("DASHBOARD_USER", "admin"))
-    dashboard_pass: str = field(default_factory=lambda: _env("DASHBOARD_PASS", "changeme"))
 
     timezone: str = field(default_factory=lambda: _env("TZ", "Asia/Tehran"))
 
