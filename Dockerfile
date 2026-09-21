@@ -28,6 +28,8 @@ RUN git clone --depth 1 --branch main https://github.com/NousResearch/hermes-age
 # Editable install: upstream blocks wheel/sdist builds (shell/Docker/Nix only),
 # but explicitly allows editable installs. Source stays in the image.
 RUN pip3 install --break-system-packages -e /opt/hermes
+# Telegram gateway deps (lazy-install pins, pre-installed so adapter loads).
+RUN pip3 install --break-system-packages "python-telegram-bot[webhooks]==22.8" "aiohttp==3.14.3"
 RUN cd /opt/hermes/web && npm install --no-audit --no-fund && npm run build
 
 WORKDIR /app
