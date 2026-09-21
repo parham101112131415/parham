@@ -26,9 +26,9 @@ if [ ! -f "$DATA_DIR/.seeded" ]; then
   date -u > "$DATA_DIR/.seeded"
 fi
 
-# 2. Brain = keyless opencode-free, muse-spark 1.3 (runs on me).
+# 2. Brain = opencode Zen (your own key), muse-spark 1.3 (runs on me).
 #    Safe writer only — never hand-edit config.yaml.
-hermes config set model.default "opencode-free/muse-spark-1.3-contributor-free" >/dev/null 2>&1 || true
+hermes config set model.default "opencode-zen/muse-spark-1.3" >/dev/null 2>&1 || true
 
 # 4. Dashboard auth (a public bind REQUIRES a provider — basic password).
 export HERMES_DASHBOARD_BASIC_AUTH_USERNAME="${DASHBOARD_USER:-admin}"
