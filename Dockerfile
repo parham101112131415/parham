@@ -13,7 +13,9 @@ FROM node:24-bookworm-slim
 ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     HERMES_HOME=/data/.hermes \
-    HERMES_ALLOW_ROOT_GATEWAY=1
+    HERMES_ALLOW_ROOT_GATEWAY=1 \
+    HERMES_STREAM_STALE_TIMEOUT=600 \
+    HERMES_API_CALL_STALE_TIMEOUT=600
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 python3-pip git ca-certificates curl xz-utils \
