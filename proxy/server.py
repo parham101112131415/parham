@@ -15,11 +15,20 @@ import json
 import logging
 import os
 import shutil
+import threading
 import time
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 log = logging.getLogger("opencode-proxy")
+
+# Max concurrent opencode runs: the Railway container OOM-kills (exit -9)
+# when several heavy runs overlap. Backpressure instead of death.
+_SLOTS = threading.Semaphore(2)
+# Cap prompt size: Hermes resends full history every turn; opencode already
+# holds what it needs, so trim to keep runs fast and memory-bounded.
+MAX_PROMPT_CHARS = int(os.getenv("OPENCODE_MAX_PROMPT_CHARS", "15000"))
+HISTORY_TAIL = 12
 
 # Hermes-facing id -> real opencode model id. /model switches between these.
 MODEL_MAP = {
@@ -31,8 +40,11 @@ TIMEOUT = int(os.getenv("OPENCODE_TIMEOUT", "900"))
 
 
 def _messages_to_prompt(messages: list[dict]) -> str:
+    # Keep system prompt + recent tail only; opencode starts fresh each call.
+    systems = [m for m in messages if m.get("role") == "system"][:1]
+    others = [m for m in messages if m.get("role") != "system"][-HISTORY_TAIL:]
     parts = []
-    for m in messages:
+    for m in systems + others:
         role = m.get("role", "user")
         content = m.get("content", "")
         if isinstance(content, list):  # content blocks
@@ -41,7 +53,10 @@ def _messages_to_prompt(messages: list[dict]) -> str:
             )
         parts.append(f"{role.upper()}: {content}")
     parts.append("ASSISTANT:")
-    return "\n\n".join(parts)
+    prompt = "\n\n".join(parts)
+    if len(prompt) > MAX_PROMPT_CHARS:
+        prompt = prompt[:2000] + "\n\n[...trimmed...]\n\n" + prompt[-(MAX_PROMPT_CHARS - 2000):]
+    return prompt
 
 
 def _event_text(line: str) -> str:
@@ -110,7 +125,12 @@ async def _run_streaming(prompt: str, model: str, on_delta) -> str:
 
 
 def _run_blocking(prompt: str, model: str, on_delta) -> str:
-    return asyncio.run(_run_streaming(prompt, model, on_delta))
+    if not _SLOTS.acquire(timeout=600):
+        raise RuntimeError("engine busy, try again in a bit")
+    try:
+        return asyncio.run(_run_streaming(prompt, model, on_delta))
+    finally:
+        _SLOTS.release()
 
 
 class Handler(BaseHTTPRequestHandler):
