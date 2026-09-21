@@ -12,7 +12,8 @@ FROM node:24-bookworm-slim
 
 ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
-    HERMES_HOME=/data/.hermes
+    HERMES_HOME=/data/.hermes \
+    HERMES_ALLOW_ROOT_GATEWAY=1
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 python3-pip git ca-certificates curl xz-utils \
