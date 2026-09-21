@@ -68,6 +68,9 @@ if [ -z "${HERMES_DASHBOARD_BASIC_AUTH_SECRET:-}" ]; then
   export HERMES_DASHBOARD_BASIC_AUTH_SECRET="parham-local-secret"
 fi
 
+# 4b. Gateway workdir = /app so the agent sees AGENTS.md + scripts/.
+hermes config set terminal.cwd /app >/dev/null 2>&1 || echo "[boot] WARN: cwd set failed"
+
 # 5. Real Hermes dashboard on Railway's $PORT (prebuilt UI, no browser here).
 hermes dashboard --host 0.0.0.0 --port "${PORT:-8080}" --no-open --skip-build >/data/dashboard.log 2>&1 &
 
