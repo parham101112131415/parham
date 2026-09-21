@@ -122,12 +122,16 @@ class Handler(BaseHTTPRequestHandler):
         except Exception:  # noqa: BLE001
             self._send(400, {"error": "bad request"})
             return
+        t0 = time.monotonic()
+        n_msgs = len(req.get("messages", []))
+        log.info("req model=%s msgs=%d stream=%s", req.get("model"), n_msgs, bool(req.get("stream")))
         try:
             reply = ask(_messages_to_prompt(req.get("messages", [])))
         except Exception as exc:  # noqa: BLE001
-            log.warning("opencode call failed: %s", exc)
+            log.warning("opencode call failed after %.1fs: %s", time.monotonic() - t0, exc)
             self._send(502, {"error": {"type": "EngineError", "message": str(exc)[:300]}})
             return
+        log.info("done %.1fs chars=%d", time.monotonic() - t0, len(reply))
 
         rid = f"chatcmpl-{uuid.uuid4().hex[:12]}"
         created = int(time.time())

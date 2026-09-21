@@ -54,6 +54,9 @@ echo "[boot] hermes: $(which hermes)"
 hermes config set providers.custom.base_url "http://127.0.0.1:4096/v1" || echo "[boot] WARN: base_url set failed"
 hermes config set providers.custom.api_key "parham-local" || echo "[boot] WARN: api_key set failed"
 hermes config set model.default "custom/muse-spark-1.3" || echo "[boot] WARN: model set failed"
+hermes config set model.context_length 1000000 || echo "[boot] WARN: context_length set failed"
+hermes config set providers.custom.request_timeout_seconds 600 || echo "[boot] WARN: timeout set failed"
+hermes config set providers.custom.stale_timeout_seconds 600 || echo "[boot] WARN: stale timeout set failed"
 echo "[boot] effective model: $(hermes config get model.default 2>&1)"
 
 # 4. Dashboard auth (a public bind REQUIRES a provider — basic password).
