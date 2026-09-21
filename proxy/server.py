@@ -5,7 +5,8 @@ binary, whose genuine client attribution unlocks the free muse-spark tier.
 Hermes itself is 100% stock — nothing patched, nothing forked.
 
 Endpoints: GET /v1/models, POST /v1/chat/completions (stream + non-stream).
-Stdlib only.
+Stdlib only. Text streams to the client AS opencode produces it, so the
+Hermes stale-watchdog sees continuous output on long jobs.
 """
 from __future__ import annotations
 
@@ -20,8 +21,13 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 log = logging.getLogger("opencode-proxy")
 
-MODEL = os.getenv("OPENCODE_MODEL", "opencode/muse-spark-1.3-contributor-free")
-TIMEOUT = int(os.getenv("OPENCODE_TIMEOUT", "300"))
+# Hermes-facing id -> real opencode model id. /model switches between these.
+MODEL_MAP = {
+    "muse-spark-1.3": os.getenv("OPENCODE_MODEL", "opencode/muse-spark-1.3-contributor-free"),
+    "muse-spark-1.3-free": "opencode/muse-spark-1.3-contributor-free",
+    "mimo-v2.5-free": "opencode/mimo-v2.5-free",
+}
+TIMEOUT = int(os.getenv("OPENCODE_TIMEOUT", "900"))
 
 
 def _messages_to_prompt(messages: list[dict]) -> str:
@@ -38,55 +44,77 @@ def _messages_to_prompt(messages: list[dict]) -> str:
     return "\n\n".join(parts)
 
 
-async def _run_opencode(prompt: str) -> str:
+def _event_text(line: str) -> str:
+    """Extract cumulative assistant text from one opencode JSON event line."""
+    try:
+        event = json.loads(line)
+    except json.JSONDecodeError:
+        return ""
+    data = event.get("data") if isinstance(event.get("data"), dict) else event
+    if not isinstance(data, dict):
+        return ""
+    part = data.get("part") or {}
+    if isinstance(part, dict) and part.get("type") == "text" and part.get("text"):
+        return part["text"]
+    return ""
+
+
+async def _run_streaming(prompt: str, model: str, on_delta) -> str:
+    """Run opencode, calling on_delta(new_text_suffix) live. Returns full text."""
     binary = shutil.which("opencode")
     if not binary:
         raise RuntimeError("opencode binary not found")
     proc = await asyncio.create_subprocess_exec(
-        binary, "run", "--model", MODEL, "--format", "json", prompt,
+        binary, "run", "--model", model, "--format", "json", prompt,
         stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
     )
+    full = ""
     try:
-        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=TIMEOUT)
-    except asyncio.TimeoutError:
-        try:
-            proc.kill()
-        except ProcessLookupError:
-            pass
-        raise RuntimeError(f"opencode timed out after {TIMEOUT}s")
-    output = stdout.decode("utf-8", "ignore").strip()
-    if not output:
-        raise RuntimeError(stderr.decode("utf-8", "ignore").strip()[-500:] or "empty reply")
-    reply = ""
-    for line in output.splitlines():
-        line = line.strip()
-        if not line.startswith("{"):
-            reply = line
-            continue
-        try:
-            event = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        data = event.get("data") if isinstance(event.get("data"), dict) else event
-        part = data.get("part") or {}
-        if isinstance(part, dict) and part.get("type") == "text" and part.get("text"):
-            reply = part["text"]
-        elif isinstance(data.get("text"), str):
-            reply = data["text"]
-        elif isinstance(data.get("result"), str):
-            reply = data["result"]
-    if not reply.strip():
-        raise RuntimeError("could not parse opencode reply")
-    return reply.strip()
+        assert proc.stdout is not None
+        while True:
+            try:
+                raw = await asyncio.wait_for(proc.stdout.readline(), timeout=TIMEOUT)
+            except asyncio.TimeoutError:
+                raise RuntimeError(f"opencode silent for {TIMEOUT}s")
+            if not raw:
+                break
+            line = raw.decode("utf-8", "ignore").strip()
+            if not line:
+                continue
+            if line.startswith("{"):
+                text = _event_text(line)
+                if text and text.startswith(full):
+                    suffix = text[len(full):]
+                    if suffix:
+                        full = text
+                        on_delta(suffix)
+                elif text and not full:
+                    full = text
+                    on_delta(text)
+            else:
+                full += (("\n" if full else "") + line)
+                on_delta(line)
+        await asyncio.wait_for(proc.wait(), timeout=30)
+    finally:
+        if proc.returncode is None:
+            try:
+                proc.kill()
+            except ProcessLookupError:
+                pass
+    if proc.returncode != 0 and not full.strip():
+        err = (await proc.stderr.read()).decode("utf-8", "ignore").strip()[-500:]
+        raise RuntimeError(err or f"opencode exit {proc.returncode}")
+    if not full.strip():
+        raise RuntimeError("empty reply from opencode")
+    return full.strip()
 
 
-def ask(prompt: str) -> str:
-    """Run one opencode call from sync context."""
-    return asyncio.run(_run_opencode(prompt))
+def _run_blocking(prompt: str, model: str, on_delta) -> str:
+    return asyncio.run(_run_streaming(prompt, model, on_delta))
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "opencode-proxy/1.0"
+    server_version = "opencode-proxy/2.0"
 
     def log_message(self, *args):  # keep logs clean
         pass
@@ -102,10 +130,11 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         """Serve the model list."""
         if self.path.rstrip("/").endswith("/models") or self.path == "/v1/models":
-            self._send(200, {"object": "list", "data": [{
-                "id": "muse-spark-1.3", "object": "model",
-                "owned_by": "opencode", "created": int(time.time()),
-            }]})
+            now = int(time.time())
+            self._send(200, {"object": "list", "data": [
+                {"id": mid, "object": "model", "owned_by": "opencode", "created": now}
+                for mid in MODEL_MAP
+            ]})
         elif self.path in ("/health", "/api/health"):
             self._send(200, {"ok": True})
         else:
@@ -122,44 +151,62 @@ class Handler(BaseHTTPRequestHandler):
         except Exception:  # noqa: BLE001
             self._send(400, {"error": "bad request"})
             return
+        wanted = req.get("model") or "muse-spark-1.3"
+        model = MODEL_MAP.get(wanted, MODEL_MAP["muse-spark-1.3"])
+        prompt = _messages_to_prompt(req.get("messages", []))
         t0 = time.monotonic()
         n_msgs = len(req.get("messages", []))
-        log.info("req model=%s msgs=%d stream=%s", req.get("model"), n_msgs, bool(req.get("stream")))
-        try:
-            reply = ask(_messages_to_prompt(req.get("messages", [])))
-        except Exception as exc:  # noqa: BLE001
-            log.warning("opencode call failed after %.1fs: %s", time.monotonic() - t0, exc)
-            self._send(502, {"error": {"type": "EngineError", "message": str(exc)[:300]}})
-            return
-        log.info("done %.1fs chars=%d", time.monotonic() - t0, len(reply))
+        log.info("req model=%s->%s msgs=%d prompt_chars=%d stream=%s",
+                 wanted, model, n_msgs, len(prompt), bool(req.get("stream")))
 
         rid = f"chatcmpl-{uuid.uuid4().hex[:12]}"
         created = int(time.time())
-        if req.get("stream"):
-            chunks = [reply[i:i + 60] for i in range(0, len(reply), 60)] or [""]
-            self.send_response(200)
-            self.send_header("Content-Type", "text/event-stream")
-            self.send_header("Cache-Control", "no-cache")
-            self.end_headers()
-            for piece in chunks:
-                frame = {"id": rid, "object": "chat.completion.chunk", "created": created,
-                         "model": "muse-spark-1.3",
-                         "choices": [{"index": 0, "delta": {"content": piece}, "finish_reason": None}]}
-                self.wfile.write(f"data: {json.dumps(frame)}\n\n".encode())
-            done = {"id": rid, "object": "chat.completion.chunk", "created": created,
-                    "model": "muse-spark-1.3",
-                    "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]}
-            self.wfile.write(f"data: {json.dumps(done)}\n\ndata: [DONE]\n\n".encode())
-            return
+        try:
+            if req.get("stream"):
+                self.send_response(200)
+                self.send_header("Content-Type", "text/event-stream")
+                self.send_header("Cache-Control", "no-cache")
+                self.end_headers()
 
-        prompt_tokens = len(req.get("messages", [])) * 10
-        self._send(200, {
-            "id": rid, "object": "chat.completion", "created": created, "model": "muse-spark-1.3",
-            "choices": [{"index": 0, "message": {"role": "assistant", "content": reply},
-                         "finish_reason": "stop"}],
-            "usage": {"prompt_tokens": prompt_tokens,
-                      "completion_tokens": len(reply) // 4, "total_tokens": prompt_tokens + len(reply) // 4},
-        })
+                def _emit(piece: str) -> None:
+                    frame = {"id": rid, "object": "chat.completion.chunk",
+                             "created": created, "model": wanted,
+                             "choices": [{"index": 0, "delta": {"content": piece},
+                                          "finish_reason": None}]}
+                    self.wfile.write(f"data: {json.dumps(frame)}\n\n".encode())
+                    self.wfile.flush()
+
+                reply = _run_blocking(prompt, model, _emit)
+                done = {"id": rid, "object": "chat.completion.chunk",
+                        "created": created, "model": wanted,
+                        "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]}
+                self.wfile.write(f"data: {json.dumps(done)}\n\ndata: [DONE]\n\n".encode())
+                log.info("stream done %.1fs chars=%d", time.monotonic() - t0, len(reply))
+                return
+
+            chunks: list[str] = []
+            reply = _run_blocking(prompt, model, chunks.append)
+            prompt_tokens = len(prompt) // 4
+            self._send(200, {
+                "id": rid, "object": "chat.completion", "created": created,
+                "model": wanted,
+                "choices": [{"index": 0,
+                             "message": {"role": "assistant", "content": reply},
+                             "finish_reason": "stop"}],
+                "usage": {"prompt_tokens": prompt_tokens,
+                          "completion_tokens": len(reply) // 4,
+                          "total_tokens": prompt_tokens + len(reply) // 4},
+            })
+            log.info("done %.1fs chars=%d", time.monotonic() - t0, len(reply))
+        except (ConnectionError, BrokenPipeError):
+            log.info("client went away after %.1fs", time.monotonic() - t0)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("opencode call failed after %.1fs: %s", time.monotonic() - t0, exc)
+            try:
+                self._send(502, {"error": {"type": "EngineError",
+                                           "message": str(exc)[:300]}})
+            except (ConnectionError, BrokenPipeError):
+                pass
 
 
 def main() -> None:
@@ -167,7 +214,7 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
     port = int(os.getenv("OPENCODE_PROXY_PORT", "4096"))
     server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
-    log.info("opencode proxy on 127.0.0.1:%s model=%s", port, MODEL)
+    log.info("opencode proxy on 127.0.0.1:%s models=%s", port, ",".join(MODEL_MAP))
     server.serve_forever()
 
 
