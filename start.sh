@@ -26,14 +26,9 @@ if [ ! -f "$DATA_DIR/.seeded" ]; then
   date -u > "$DATA_DIR/.seeded"
 fi
 
-# 2. Parham theme → official user-theme slot.
-mkdir -p "$HERMES_HOME/dashboard-themes"
-cp -f /app/theme/dashboard-themes/parham.yaml "$HERMES_HOME/dashboard-themes/parham.yaml"
-
-# 3. Brain = keyless opencode-free, muse-spark family (runs on me).
-#    Theme = parham. Safe writers only — never hand-edit config.yaml.
-hermes config set model.default "opencode-free/muse-spark-1.2-contributor-free" >/dev/null 2>&1 || true
-hermes config set dashboard.theme parham >/dev/null 2>&1 || true
+# 2. Brain = keyless opencode-free, muse-spark 1.3 (runs on me).
+#    Safe writer only — never hand-edit config.yaml.
+hermes config set model.default "opencode-free/muse-spark-1.3-contributor-free" >/dev/null 2>&1 || true
 
 # 4. Dashboard auth (a public bind REQUIRES a provider — basic password).
 export HERMES_DASHBOARD_BASIC_AUTH_USERNAME="${DASHBOARD_USER:-admin}"

@@ -1,14 +1,14 @@
-# 🔥 Parham — REAL Hermes Agent on Railway
+# Parham — REAL Hermes Agent on Railway
 
-نه کپی، نه بازنویسی — خودِ `hermes-agent` اصلی (پین‌شده به نسخه تست‌شده) که مستقیم روی **opencode** (خانواده muse-spark، یعنی من) جواب می‌ده. بدون کلید جدا، بدون مدل دلخواه.
+نه کپی، نه بازنویسی، نه تم — خودِ `hermes-agent` اصلی که مستقیم روی **opencode** (muse-spark ۱.۳، یعنی من) جواب می‌ده. بدون کلید جدا، بدون مدل دلخواه.
 
 ## چی ران می‌شه
 
 | سرویس | دستور | توضیح |
 |---|---|---|
 | تلگرام | `hermes gateway run` | بات واقعی Hermes (منوی دستورات خودکار Hermes) |
-| داشبورد | `hermes dashboard` روی `$PORT` | داشبورد اصلی + تم Parham (قرمز-مشکی متحرک + حباب) |
-| مغز | `opencode-free/muse-spark-1.2-contributor-free` | keyless — هیچ کلیدی لازم نیست |
+| داشبورد | `hermes dashboard` روی `$PORT` | داشبورد اصلی، بدون هیچ تغییری |
+| مغز | `opencode-free/muse-spark-1.3-contributor-free` | keyless — هیچ کلیدی لازم نیست |
 
 حافظه، اسکیل‌ها، کرون‌ها (دلار ساعتی/نیمه‌شب، مموری‌بکاپ، pairing) از دو بکاپ خودت سید می‌شن و بعدش فقط روی ولوم Railway ذخیره می‌شن. هیچی روی گوشی نیست.
 

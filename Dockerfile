@@ -23,8 +23,6 @@ RUN git clone --depth 1 --branch main https://github.com/NousResearch/hermes-age
     && cd /opt/hermes-tmp && git fetch --depth 1 origin ${HERMES_REF} && git checkout ${HERMES_REF} \
     && rm -rf /opt/hermes-tmp/.git && mv /opt/hermes-tmp /opt/hermes
 
-# Theme = title patch only (colors come from the official user-theme slot).
-COPY theme/web-patches/index.html /opt/hermes/web/index.html
 RUN pip3 install --break-system-packages /opt/hermes
 RUN cd /opt/hermes/web && npm install --no-audit --no-fund && npm run build
 
