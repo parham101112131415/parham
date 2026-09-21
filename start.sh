@@ -12,13 +12,13 @@ if [ ! -f "$DATA_DIR/.seeded" ]; then
   if [ -f /app/seed/migrate-full.tar.xz ]; then
     tar -xJf /app/seed/migrate-full.tar.xz -C "$DATA_DIR"
   fi
-  if [ -f /app/seed/hermes-memory.tgz ]; then
+  if [ -f /app/seed/hermes-memory-20260917-1405.tgz ]; then
     _tmp="$(mktemp -d)"
-    tar -xzf /app/seed/hermes-memory.tgz -C "$_tmp"
+    tar -xzf /app/seed/hermes-memory-20260917-1405.tgz -C "$_tmp"
     for d in memories scripts dollar platforms fonts state skills; do
       [ -e "$_tmp/$d" ] && cp -r "$_tmp/$d" "$HERMES_HOME/"
     done
-    for f in SOUL.md channel_directory.json chat_mirror_state.json pairing_watch_state.json jobs-manifest.json dollar_card.py RESTORE.md; do
+    for f in SOUL.md .env config.yaml channel_directory.json chat_mirror_state.json pairing_watch_state.json jobs-manifest.json dollar_card.py RESTORE.md; do
       [ -e "$_tmp/$f" ] && cp "$_tmp/$f" "$HERMES_HOME/"
     done
     rm -rf "$_tmp"

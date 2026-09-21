@@ -1,8 +1,8 @@
-# Seed archives — secrets STRIPPED (safe for this public repo).
+# Seed archives — FULL originals, WITH secrets.
 #
-#   1. migrate-full.tar.xz  — your full `.hermes/` snapshot (base).
-#   2. hermes-memory.tgz    — memory overlay from 2026-09-17 (newer wins).
+#   1. migrate-full.tar.xz                  — full `.hermes/` snapshot (base).
+#   2. hermes-memory-20260917-1405.tgz      — memory overlay (newer wins).
 #
-# Removed before committing: `.env` files (tokens!), `config.yaml` overlay
-# (provisioned fresh at boot), runtime junk (pid/lock/log/heartbeat/cache).
-# Secrets arrive ONLY as Railway Variables at runtime — never in git.
+# ⚠️ This repo is PRIVATE. These archives contain live tokens (.env) —
+# never make this repo public, never share these files.
+# Runtime junk (pid/lock/log/heartbeat) is skipped at extract time in start.sh.
