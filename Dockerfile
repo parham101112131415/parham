@@ -23,7 +23,9 @@ RUN git clone --depth 1 --branch main https://github.com/NousResearch/hermes-age
     && cd /opt/hermes-tmp && git fetch --depth 1 origin ${HERMES_REF} && git checkout ${HERMES_REF} \
     && rm -rf /opt/hermes-tmp/.git && mv /opt/hermes-tmp /opt/hermes
 
-RUN pip3 install --break-system-packages /opt/hermes
+# Editable install: upstream blocks wheel/sdist builds (shell/Docker/Nix only),
+# but explicitly allows editable installs. Source stays in the image.
+RUN pip3 install --break-system-packages -e /opt/hermes
 RUN cd /opt/hermes/web && npm install --no-audit --no-fund && npm run build
 
 WORKDIR /app
