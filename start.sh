@@ -38,6 +38,7 @@ fi
 #    Hermes stays 100% stock (provider=custom) — engine = opencode = me.
 export OPENCODE_MODEL="${OPENCODE_MODEL:-opencode/muse-spark-1.3-contributor-free}"
 export OPENCODE_PROXY_PORT="4096"
+export OPENCODE_TIMEOUT="${OPENCODE_TIMEOUT:-900}"
 python3 /app/proxy/server.py >/data/proxy.log 2>&1 &
 echo "[boot] proxy starting on 127.0.0.1:4096 model=$OPENCODE_MODEL"
 for _i in $(seq 1 30); do
