@@ -39,11 +39,22 @@ fi
 export OPENCODE_MODEL="${OPENCODE_MODEL:-opencode/muse-spark-1.3-contributor-free}"
 export OPENCODE_PROXY_PORT="4096"
 python3 /app/proxy/server.py >/data/proxy.log 2>&1 &
+echo "[boot] proxy starting on 127.0.0.1:4096 model=$OPENCODE_MODEL"
+for _i in $(seq 1 30); do
+  if curl -sf -m 2 http://127.0.0.1:4096/v1/models >/dev/null 2>&1; then
+    echo "[boot] proxy UP"
+    break
+  fi
+  sleep 2
+done
+curl -s -m 5 http://127.0.0.1:4096/v1/models || echo "[boot] proxy NOT reachable!"
 
-# 4. Point Hermes at the local engine. Safe writers only.
-hermes config set providers.custom.base_url "http://127.0.0.1:4096/v1" >/dev/null 2>&1 || true
-hermes config set providers.custom.api_key "parham-local" >/dev/null 2>&1 || true
-hermes config set model.default "custom/muse-spark-1.3" >/dev/null 2>&1 || true
+# 4. Point Hermes at the local engine. Safe writers only (output kept visible).
+echo "[boot] hermes: $(which hermes)"
+hermes config set providers.custom.base_url "http://127.0.0.1:4096/v1" || echo "[boot] WARN: base_url set failed"
+hermes config set providers.custom.api_key "parham-local" || echo "[boot] WARN: api_key set failed"
+hermes config set model.default "custom/muse-spark-1.3" || echo "[boot] WARN: model set failed"
+echo "[boot] effective model: $(hermes config get model.default 2>&1)"
 
 # 4. Dashboard auth (a public bind REQUIRES a provider — basic password).
 export HERMES_DASHBOARD_BASIC_AUTH_USERNAME="${DASHBOARD_USER:-admin}"
