@@ -1,56 +1,31 @@
-# 🔥 Parham — Hermes-style Telegram AI Agent + REAL Hermes dashboard
+# 🔥 Parham — REAL Hermes Agent on Railway
 
-بات تلگرامی ایجنت‌محور با **ساختار Hermes** و **تم Parham** (قرمز-مشکی متحرک + حباب)، مخصوص اجرا روی **Railway**. هیچ دیتایی رو گوشی نمی‌مونه — همه‌چی فقط تو ولوم Railway.
+نه کپی، نه بازنویسی — خودِ `hermes-agent` اصلی (پین‌شده به نسخه تست‌شده) که مستقیم روی **opencode** (خانواده muse-spark، یعنی من) جواب می‌ده. بدون کلید جدا، بدون مدل دلخواه.
 
-## معماری
+## چی ران می‌شه
 
-```
-تلگرام → bot/handlers → memory (SQLite تو /data) → ai/bridge
-→ opencode serve داخلی (مدل‌های رایگان Zen مثل muse-spark)
-→ جواب تیکه‌تیکه ۲۰۰ کاراکتری + دکمه‌های 👍👎🔄💬
+| سرویس | دستور | توضیح |
+|---|---|---|
+| تلگرام | `hermes gateway run` | بات واقعی Hermes (منوی دستورات خودکار Hermes) |
+| داشبورد | `hermes dashboard` روی `$PORT` | داشبورد اصلی + تم Parham (قرمز-مشکی متحرک + حباب) |
+| مغز | `opencode-free/muse-spark-1.2-contributor-free` | keyless — هیچ کلیدی لازم نیست |
 
-$PORT → داشبورد اصلی Hermes (hermes dashboard واقعی، نه کپی)
-        + تم Parham (قرمز-مشکی متحرک + حباب) + تایتل Parham Panel
-```
+حافظه، اسکیل‌ها، کرون‌ها (دلار ساعتی/نیمه‌شب، مموری‌بکاپ، pairing) از دو بکاپ خودت سید می‌شن و بعدش فقط روی ولوم Railway ذخیره می‌شن. هیچی روی گوشی نیست.
 
-* مغز تلگرام: `opencode serve` داخلی + سشن جدا `tg-<user_id>` برای هر کاربر (مثل Hermes gateway)
-* داشبورد: **خود `hermes dashboard`** (پین‌شده به SHA تست‌شده) — تب‌های Sessions/Profiles/Cron/Skills/MCP/Tools/Chat واقعی. تنها تفاوت با Hermes خام: تم `parham` (از اسلات رسمی `dashboard-themes/*.yaml`) و تایتل.
-* ورکرها (از jobs-manifest هرمس): دلار ساعتی، دلار نیمه‌شب، مموری‌بکاپ، pairing-watch
-* آنبوردینگ AI-driven: اسم، اسم بات (انتخاب کاربر)، شهر، علایق، شخصیت — بدون مرحله خشک
+## دیپلوی
 
-## دیپلوی روی Railway (راحت)
-
-1. ریپو رو به Railway وصل کن (Deploy from GitHub → `parham101112131415/parham`)
-2. یه **Volume** اضافه کن و به `/data` مونت کن
-3. این Variables رو بذار:
+1. Deploy from GitHub → `parham101112131415/parham`
+2. Volume به `/data`
+3. Variables:
 
 | Variable | مقدار |
 |---|---|
-| `BOT_TOKEN` | توکن بات تلگرام |
-| `OWNER_ID` | آیدی عددی تلگرام خودت (`8055210419`) |
-| `AI_BACKEND` | `bridge` |
-| `OPENCODE_MODEL` | `opencode/muse-spark-1.3` (یا هر مدل رایگان Zen) |
-| `OPENCODE_AUTH_JSON` | محتوای تک‌خطی `~/.local/share/opencode/auth.json` گوشیت |
-| `DASHBOARD_USER` / `DASHBOARD_PASS` | یوزر/پسورد داشبورد Hermes |
+| `TELEGRAM_BOT_TOKEN` | توکن باتت |
+| `TELEGRAM_ALLOWED_USERS` | `8055210419` |
+| `TELEGRAM_HOME_CHANNEL` | `8055210419` |
+| `DASHBOARD_USER` | `admin` (یا دلخواه) |
+| `DASHBOARD_PASS` | پسورد قوی |
 | `DATA_DIR` | `/data` |
 | `TZ` | `Asia/Tehran` |
 
-`PORT` رو خود Railway می‌ذاره.
-
-4. دو بکاپ هرمس (`migrate-full.tar.xz` + `hermes-memory-*.tgz`) رو یا تو پوشه `seed/` بذار قبل از دیپلوی، یا بعدش از تلگرام (`/restore` در reply به فایل) آپلود کن. اولی بیس می‌شه، دومی روش می‌خوابه (جدیده برنده‌ست).
-5. دیپلوی کن. داشبورد اصلی Hermes با تم Parham میاد روی دامنه‌ای که Railway میده (`xxxx.up.railway.app`) — لاگین با یوزر/پسورد خودت.
-
-## اجرای لوکال (Termux)
-
-```bash
-pip install -r requirements.txt
-cp .env.example .env   # پرش کن
-opencode serve --hostname 127.0.0.1 --port 4096 &
-python -m bot.main
-```
-
-## دستورات بات (منوی خودکار کنار چت، مثل Hermes)
-
-start · help · settings · clear · memory · forget · mode · reconfig · lang · backup · restore · status (سه‌تای آخر فقط مالک)
-
-ویس → Whisper، عکس → تحلیل (نیاز به `OPENAI_API_KEY` داره، وگرنه متنی جواب میده).
+`PORT` رو Railway می‌ذاره. داشبورد روی دامنه Railway با یوزر/پسورد خودت.

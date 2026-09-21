@@ -1,9 +1,8 @@
-# Seed archives (NOT committed)
+# Seed archives — secrets STRIPPED (safe for this public repo).
 #
-# Put the two Hermes backups here BEFORE first deploy (or upload later
-# via dashboard /backup → restore, or Telegram /restore in reply):
-#   1. migrate-full.tar.xz          (base — full .hermes snapshot)
-#   2. hermes-memory-*.tgz          (overlay — newer wins)
+#   1. migrate-full.tar.xz  — your full `.hermes/` snapshot (base).
+#   2. hermes-memory.tgz    — memory overlay from 2026-09-17 (newer wins).
 #
-# On first boot they are layered onto /data (pid/lock/log/cache skipped),
-# then everything saves only on the Railway volume. Nothing stays on the phone.
+# Removed before committing: `.env` files (tokens!), `config.yaml` overlay
+# (provisioned fresh at boot), runtime junk (pid/lock/log/heartbeat/cache).
+# Secrets arrive ONLY as Railway Variables at runtime — never in git.

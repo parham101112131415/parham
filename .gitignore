@@ -1,11 +1,5 @@
 __pycache__/
 *.pyc
 .env
-data/
-*.db
-*.db-shm
-*.db-wal
-seed/*.tar.xz
-seed/*.tgz
 backups/
 *.log
