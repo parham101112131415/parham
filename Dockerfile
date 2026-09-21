@@ -7,7 +7,8 @@
 #   - Memory/skills/cron → seeded from your two Hermes backups (secrets stripped)
 #
 # Secrets are NEVER committed. They arrive only as Railway Variables.
-FROM node:20-bookworm-slim
+# node:24 — hermes web/ requires node ^22.22 || ^24.11 || >=26 (bookworm python3.11 ✓).
+FROM node:24-bookworm-slim
 
 ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
