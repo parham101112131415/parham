@@ -32,6 +32,10 @@ RUN pip3 install --break-system-packages -e /opt/hermes
 RUN pip3 install --break-system-packages "python-telegram-bot[webhooks]==22.8" "aiohttp==3.14.3"
 RUN cd /opt/hermes/web && npm install --no-audit --no-fund && npm run build
 
+# ---- opencode engine (genuine CLI — its attribution unlocks free muse-spark)
+ARG OPENCODE_VERSION=1.18.27
+RUN npm install -g opencode-ai@${OPENCODE_VERSION} --no-audit --no-fund
+
 WORKDIR /app
 COPY . .
 RUN chmod +x start.sh

@@ -26,9 +26,24 @@ if [ ! -f "$DATA_DIR/.seeded" ]; then
   date -u > "$DATA_DIR/.seeded"
 fi
 
-# 2. Brain = opencode Zen (your own key), muse-spark 1.3 (runs on me).
-#    Safe writer only — never hand-edit config.yaml.
-hermes config set model.default "opencode-zen/muse-spark-1.3" >/dev/null 2>&1 || true
+# 2. opencode engine auth (optional): paste local auth.json content into
+#    OPENCODE_AUTH_JSON. Free tier usually works in the genuine client as-is.
+if [ -n "$OPENCODE_AUTH_JSON" ]; then
+  mkdir -p /root/.local/share/opencode
+  printf '%s' "$OPENCODE_AUTH_JSON" > /root/.local/share/opencode/auth.json
+  chmod 600 /root/.local/share/opencode/auth.json
+fi
+
+# 3. Invisible driver: genuine opencode CLI as a local OpenAI API.
+#    Hermes stays 100% stock (provider=custom) — engine = opencode = me.
+export OPENCODE_MODEL="${OPENCODE_MODEL:-opencode/muse-spark-1.3-contributor-free}"
+export OPENCODE_PROXY_PORT="4096"
+python3 /app/proxy/server.py >/data/proxy.log 2>&1 &
+
+# 4. Point Hermes at the local engine. Safe writers only.
+hermes config set providers.custom.base_url "http://127.0.0.1:4096/v1" >/dev/null 2>&1 || true
+hermes config set providers.custom.api_key "parham-local" >/dev/null 2>&1 || true
+hermes config set model.default "custom/muse-spark-1.3" >/dev/null 2>&1 || true
 
 # 4. Dashboard auth (a public bind REQUIRES a provider — basic password).
 export HERMES_DASHBOARD_BASIC_AUTH_USERNAME="${DASHBOARD_USER:-admin}"
