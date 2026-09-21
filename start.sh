@@ -50,16 +50,41 @@ for _i in $(seq 1 30); do
 done
 curl -s -m 5 http://127.0.0.1:4096/v1/models || echo "[boot] proxy NOT reachable!"
 
-# 4. Point Hermes at the local engine. Safe writers only (output kept visible).
-echo "[boot] hermes: $(which hermes)"
+# 4. Point Hermes at the local engine (canonical shape: bare model + provider
+#    keys, mirroring a working local config). Safe writers only.
 hermes config set providers.custom.base_url "http://127.0.0.1:4096/v1" || echo "[boot] WARN: base_url set failed"
 hermes config set providers.custom.api_key "parham-local" || echo "[boot] WARN: api_key set failed"
-hermes config set model.default "custom/muse-spark-1.3" || echo "[boot] WARN: model set failed"
+hermes config set model.provider "custom" || echo "[boot] WARN: provider set failed"
+hermes config set model.default "muse-spark-1.3" || echo "[boot] WARN: model set failed"
+hermes config set model.base_url "http://127.0.0.1:4096/v1" || echo "[boot] WARN: model base_url failed"
+hermes config set model.api_key "parham-local" || echo "[boot] WARN: model api_key failed"
 hermes config set model.context_length 1000000 || echo "[boot] WARN: context_length set failed"
 hermes config set custom_providers '[{"name":"parham-local","base_url":"http://127.0.0.1:4096/v1","models":{"muse-spark-1.3":{"context_length":1000000}}}]' || echo "[boot] WARN: custom_providers set failed"
-hermes config set providers.custom.request_timeout_seconds 600 || echo "[boot] WARN: timeout set failed"
-hermes config set providers.custom.stale_timeout_seconds 600 || echo "[boot] WARN: stale timeout set failed"
-echo "[boot] effective model: $(hermes config get model.default 2>&1)"
+echo "[boot] effective model: $(hermes config get model.default 2>&1) / $(hermes config get model.provider 2>&1)"
+
+# 4b. Unpin stale per-session models (seeded state.db can pin an old provider
+# for the Telegram DM session; NULL falls through to the global default).
+python3 - "$HERMES_HOME/state.db" <<'EOF' || echo "[boot] WARN: session unpin failed"
+import sqlite3, sys
+db = sys.argv[1]
+try:
+    c = sqlite3.connect(db)
+except Exception as e:
+    print("no state.db yet:", e); sys.exit(0)
+try:
+    cols = [r[1] for r in c.execute("PRAGMA table_info(sessions)")]
+    if "model_config" not in cols:
+        sys.exit(0)
+    cur = c.execute(
+        "UPDATE sessions SET model=NULL, model_config=NULL "
+        "WHERE session_key LIKE 'agent:main:telegram:%' "
+        "AND (model_config IS NULL OR model_config NOT LIKE '%127.0.0.1:4096%')"
+    )
+    print(f"unpinned {cur.rowcount} telegram session(s)")
+    c.commit()
+except Exception as e:
+    print("unpin skipped:", e)
+EOF
 
 # 4. Dashboard auth (a public bind REQUIRES a provider — basic password).
 export HERMES_DASHBOARD_BASIC_AUTH_USERNAME="${DASHBOARD_USER:-admin}"
